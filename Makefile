@@ -67,7 +67,7 @@ LD = $(TOOLPREFIX)ld
 OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
 
-CFLAGS = -Wall -O0 -fno-omit-frame-pointer -ggdb
+CFLAGS = -Wall -O0 -fno-omit-frame-pointer -ggdb -march=rv64imafd
 
 ifdef LAB
 LABUPPER = $(shell echo $(LAB) | tr a-z A-Z)
@@ -151,7 +151,9 @@ UPROGS=\
 	$U/_zombie\
 	$U/_sleep\
 	$U/_pingpong\
-	$U/_primes
+	$U/_primes\
+	$U/_find\
+	$U/_xargs
 
 
 ifeq ($(LAB),syscall)
