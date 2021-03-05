@@ -15,6 +15,8 @@ struct proc *initproc;
 int nextpid = 1;
 struct spinlock pid_lock;
 
+static uint64 proc_count = 0;
+
 extern void forkret(void);
 static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
@@ -126,6 +128,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+  proc_count++;
 
   return p;
 }
@@ -150,6 +153,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  proc_count--;
 }
 
 // Create a user page table for a given process,
@@ -280,8 +284,13 @@ fork(void)
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
+  // Copy trace mask to child to the child.
+  np->traceno = p->traceno;
+  //printf("Copy traceno from parent(%d) to child: %d\n",p->pid,p->traceno);
+
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
+
 
   // increment reference counts on open file descriptors.
   for(i = 0; i < NOFILE; i++)
@@ -692,4 +701,8 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+uint64 proc_num(){
+  return proc_count;
 }
