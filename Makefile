@@ -38,9 +38,9 @@ OBJS = \
   $K/virtio_disk.o
 
 ifeq ($(LAB),pgtbl)
-OBJS += \
-	$K/vmcopyin.o
+OBJS += $K/vmcopyin.o
 endif
+
 
 ifeq ($(LAB),$(filter $(LAB), pgtbl lock))
 OBJS += \
@@ -175,6 +175,8 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_trace\
+	$U/_sysinfotest\
 
 
 
@@ -239,7 +241,6 @@ UEXTRA=
 ifeq ($(LAB),util)
 	UEXTRA += user/xargstest.sh
 endif
-
 
 fs.img: mkfs/mkfs README $(UEXTRA) $(UPROGS)
 	mkfs/mkfs fs.img README $(UEXTRA) $(UPROGS)

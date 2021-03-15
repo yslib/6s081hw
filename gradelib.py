@@ -200,7 +200,11 @@ def assert_lines_match(text, *regexps, **kw):
 # Utilities
 #
 
+<<<<<<< HEAD
 __all__ += ["make", "maybe_unlink", "reset_fs", "color", "random_str", "check_time", "check_answers"]
+=======
+__all__ += ["make", "maybe_unlink", "reset_fs", "color", "random_str", "check_time"]
+>>>>>>> syscall
 
 MAKE_TIMESTAMP = 0
 
@@ -258,6 +262,7 @@ def check_time():
     except IOError:
         raise AssertionError('Cannot read time.txt')
 
+<<<<<<< HEAD
 def check_answers(file, n=10):
     try:
         with open(file) as f:
@@ -267,6 +272,8 @@ def check_answers(file, n=10):
     except IOError:
         raise AssertionError('Cannot read %s' % file)
 
+=======
+>>>>>>> syscall
 
 ##################################################################
 # Controllers
