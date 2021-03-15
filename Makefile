@@ -36,6 +36,7 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
+  $K/vmcopyin.o
 
 ifeq ($(LAB),pgtbl)
 OBJS += $K/vmcopyin.o
