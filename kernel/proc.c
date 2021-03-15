@@ -245,7 +245,7 @@ int growproc(int n) {
 
   sz = p->sz;
   if (n > 0) {
-    if(sz + n > CLINT){
+    if(sz + n > PLIC){
       return -1;
     }
     uint old = sz;
@@ -254,7 +254,10 @@ int growproc(int n) {
     }
     kvmalloc_userspace(p->pagetable,p->kernel_pagetable,old,old+n);
   } else if (n < 0) {
+    //uint old = sz;
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+    //kvmalloc_userspace(p->pagetable,p->kernel_pagetable,old,old+n);
+
   }
   p->sz = sz;
   return 0;

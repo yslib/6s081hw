@@ -337,8 +337,24 @@ uint64 kvmalloc_userspace(pagetable_t user, pagetable_t krnl, uint64 oldsz,
   uint64 a;
   pte_t * pte;
 
-  if (newsz < oldsz)
+  if (newsz < oldsz){
+
+    newsz = PGROUNDUP(newsz);
+    uvmunmap(krnl,newsz,(oldsz-newsz)/PGSIZE,1);
+    for (a = newsz; a < oldsz; a += PGSIZE) {
+      //mem = walkaddr(user, a);
+      pte = walk(user,a,0);
+
+      if ((pte = walk(user, a, 0)) == 0)
+        panic("kvminit_userspace: pte should exist");
+      if ((*pte & PTE_V) == 0)
+        panic("kvminit_userspace: page not present");
+      // free pte ph mem
+      freewalk_kernelpagetable((pagetable_t)(PTE2PA(*pte)));
+    }
     return oldsz;
+  }
+
 
   oldsz = PGROUNDUP(oldsz);
   for (a = oldsz; a < newsz; a += PGSIZE) {
@@ -456,8 +472,9 @@ int kvminit_userspace(pagetable_t user, pagetable_t krnl, uint64 sz) {
   for (i = 0; i < sz; i += PGSIZE) {
     if ((pte = walk(user, i, 0)) == 0)
       panic("kvminit_userspace: pte should exist");
-    if ((*pte & PTE_V) == 0)
+    if ((*pte & PTE_V) == 0){
       panic("kvminit_userspace: page not present");
+    }
     pa = PTE2PA(*pte);
     int perm = PTE_FLAGS(*pte) & ~PTE_U;
     if(remappage(krnl, i, pa, perm)){
