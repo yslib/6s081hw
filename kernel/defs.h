@@ -179,6 +179,9 @@ pagetable_t     proc_create_kernel_pagetable();
 void            proc_free_kernel_pagetable(pagetable_t,uint64);
 void            freewalk(pagetable_t pagetable);
 
+uint64          kvmalloc_userspace(pagetable_t user,pagetable_t krnl,uint64 oldsz,uint64 newsz);
+int             kvminit_userspace(pagetable_t user, pagetable_t krnl, uint64 sz);
+
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);
@@ -189,6 +192,9 @@ void            plic_complete(int);
 void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
+
+// vmcopyin.c
+int            copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

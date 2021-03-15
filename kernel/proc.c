@@ -220,6 +220,10 @@ void userinit(void) {
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+  printf("userinit: t: %p, kt: %p,\n",p->pagetable,p->kernel_pagetable);
+  if(kvminit_userspace(p->pagetable,p->kernel_pagetable,p->sz)!=0){
+    panic("userinit");
+  }
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;     // user program counter
@@ -244,6 +248,7 @@ int growproc(int n) {
     if ((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    kvmalloc_userspace(p->pagetable,p->kernel_pagetable,sz,sz+n);
   } else if (n < 0) {
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
@@ -269,6 +274,9 @@ int fork(void) {
     release(&np->lock);
     return -1;
   }
+
+  // sync userspace of krnl pgtle
+  kvminit_userspace(np->pagetable,np->kernel_pagetable,p->sz);
 
 
 

@@ -116,6 +116,10 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
+  // sync userspace of krnl pgtle
+  printf("in exec: pt: %p, kpt: %p\n",p->pagetable,p->kernel_pagetable);
+  kvminit_userspace(p->pagetable,p->kernel_pagetable,p->sz);
+
   vmprint(p->pagetable);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
