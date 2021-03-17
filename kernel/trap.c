@@ -36,6 +36,7 @@ trapinithart(void)
 void
 usertrap(void)
 {
+
   int which_dev = 0;
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
@@ -73,12 +74,27 @@ usertrap(void)
     p->killed = 1;
   }
 
+
   if(p->killed)
     exit(-1);
 
+  // if(p->sigret == 1){
+    // p->sigret = 0;
+  // }
+
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    if(p->interval != 0){
+      p->ticks++;
+      if(p->ticks == p->interval && p->sigret == 1){
+        p->ticks = 0;
+        memmove(p->ticktrapframe,p->trapframe,sizeof(struct trapframe));
+        p->sigret = 0;
+        p->trapframe->epc = (uint64)p->alarmhandler;
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
@@ -133,6 +149,7 @@ usertrapret(void)
 void 
 kerneltrap()
 {
+  //printf("Kernel trap\n");
   int which_dev = 0;
   uint64 sepc = r_sepc();
   uint64 sstatus = r_sstatus();
@@ -148,6 +165,7 @@ kerneltrap()
     printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
     panic("kerneltrap");
   }
+
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)

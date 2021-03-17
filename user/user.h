@@ -1,6 +1,8 @@
 struct stat;
 struct rtcdate;
 
+typedef void (*fn)(void);
+
 // system calls
 int fork(void);
 int exit(int) __attribute__((noreturn));
@@ -23,6 +25,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int sigalarm(int n,fn f);
+void sigreturn(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

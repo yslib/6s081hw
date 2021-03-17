@@ -29,6 +29,7 @@ main(int argc, char *argv[])
 
 volatile static int count;
 
+
 void
 periodic()
 {
@@ -43,12 +44,14 @@ void
 test0()
 {
   int i;
+  //printf("periodic addr: %p\n",periodic);
   printf("test0 start\n");
   count = 0;
   sigalarm(2, periodic);
   for(i = 0; i < 1000*500000; i++){
-    if((i % 1000000) == 0)
+    if((i % 1000000) == 0){
       write(2, ".", 1);
+    }
     if(count > 0)
       break;
   }
