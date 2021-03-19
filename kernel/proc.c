@@ -139,6 +139,8 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  //printf("freeproc psz: %d page count: %d\n",p->sz,PGROUNDUP(p->sz)/PGSIZE);
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
