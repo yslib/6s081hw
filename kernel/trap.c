@@ -67,7 +67,24 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  }else if(r_scause() == 5) {
+    uint64 va = r_stval();
+    printf("COW fault at %p\n",va);
+    struct proc * p = myproc();
+    pagetable_t parent = p->parent->pagetable;
+    pte_t * parent_va_pte = walk(parent,va,0);
+    *parent_va_pte = PTE_FLAGS(*parent_va_pte) | PTE_W;
+    char * pa = kalloc();
+    if(pa == 0){
+      printf("not enough phsical memory");
+      p->killed = 1;
+    }
+    memmove(pa,(void*)PTE2PA(*parent_va_pte),PGSIZE);
+    pte_t  * pte = walk(p->pagetable,va,0);
+    int flags = PTE_FLAGS(*pte) | PTE_W;
+    uvmunmap(p->pagetable,PGROUNDDOWN(va),1,0);
+    mappages(p->pagetable,PGROUNDDOWN(va),PGSIZE,(uint64)pa,flags);
+  }else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;

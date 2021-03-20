@@ -305,6 +305,11 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+//
+// For a COW implementation, copy the parent memory pagetable without allocating 
+// physical memory
+//
+#define UVMCOPY_MOD
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
@@ -319,14 +324,28 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+
+#ifndef UVMCOPY_MOD
+
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char*)pa, PGSIZE);
+
     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
       kfree(mem);
       goto err;
     }
+#else
+    flags = PTE_FLAGS(*pte) & ~PTE_W;
+    mem = (char*)pa;
+    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
+      goto err;
+    }
+    *pte = flags;
+#endif
+
   }
   return 0;
 
