@@ -15,6 +15,9 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+
+int pmrefcnt[MAXPHYPG];
+
 /*
  * create a direct-map page table for the kernel.
  */
@@ -326,24 +329,23 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     pa = PTE2PA(*pte);
 
 #ifndef UVMCOPY_MOD
-
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char*)pa, PGSIZE);
-
     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
       kfree(mem);
       goto err;
     }
 #else
-    flags = PTE_FLAGS(*pte) & ~PTE_W;
+    flags = (PTE_FLAGS(*pte) & ~PTE_W) | PTE_COW;
     mem = (char*)pa;
+    kaddref((void*)(*pte));
     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
       kfree(mem);
       goto err;
     }
-    *pte = flags;
+    *pte = *pte | flags;
 #endif
 
   }
@@ -458,4 +460,28 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+void vmprintimpl(pagetable_t pagetable, int level) {
+  if (level == 4)
+    return;
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if ((pte & PTE_V)) {
+      for (int j = 0; j < level; j++) {
+        if (j == 0)
+          printf("..");
+        else
+          printf(" ..");
+      }
+      uint64 child = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, pte, child);
+      vmprintimpl((pagetable_t)child, level + 1);
+    }
+  }
+}
+
+void vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+  vmprintimpl(pagetable, 1);
 }

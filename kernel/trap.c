@@ -67,26 +67,51 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  }else if(r_scause() == 5) {
+  }
+  else if(r_scause() == 13 || r_scause() == 15) {
+    //printf("Page Fault: %d %p\n",r_scause(),r_sepc());
+
     uint64 va = r_stval();
-    printf("COW fault at %p\n",va);
     struct proc * p = myproc();
-    pagetable_t parent = p->parent->pagetable;
-    pte_t * parent_va_pte = walk(parent,va,0);
-    *parent_va_pte = PTE_FLAGS(*parent_va_pte) | PTE_W;
-    char * pa = kalloc();
+
+    pte_t * pte = walk(p->pagetable,va,0);
+    if(!(PTE_FLAGS(*pte) & PTE_COW)){
+      panic("not a cow page\n");
+    }
+
+    const uint64 src_pa = PTE2PA(*pte);
+
+    char * pa = kalloc(); // add a ref count for new
+
     if(pa == 0){
-      printf("not enough phsical memory");
+      printf("not enough physical memory");
       p->killed = 1;
     }
-    memmove(pa,(void*)PTE2PA(*parent_va_pte),PGSIZE);
-    pte_t  * pte = walk(p->pagetable,va,0);
-    int flags = PTE_FLAGS(*pte) | PTE_W;
-    uvmunmap(p->pagetable,PGROUNDDOWN(va),1,0);
-    mappages(p->pagetable,PGROUNDDOWN(va),PGSIZE,(uint64)pa,flags);
+    memmove(pa,(void*)PGROUNDDOWN(src_pa),PGSIZE);
+
+    if(pte == 0) panic("null pte");
+
+    int flags = (PTE_FLAGS(*pte) | PTE_W) & (~PTE_COW); // TODO:: Remove COW bit?
+    *pte = PA2PTE(pa) | flags; // remapping to new
+
+    // release a ref count for src pa
+    int src_ref;
+
+    src_ref = kgetref((void*)(*pte));
+    printf("before deref src_pa:%p %d\n",src_pa,src_ref);
+
+    kfree((void*)src_pa);
+    src_ref = kgetref((void*)(*pte));
+    if(src_ref < 1) panic("invalid ref");
+    if(src_ref == 1){
+      *pte =(PA2PTE(src_pa) | PTE_FLAGS(*pte) | PTE_W )&(~PTE_COW); // Restore Write Bit
+    }
+    //printf("COW: va: %p, dst pa: %p, src pa: %p\n",va,pa,src_pa);
+
   }else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("usertrap(): unexpected scause %d pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    vmprint(myproc()->pagetable);
     p->killed = 1;
   }
 
