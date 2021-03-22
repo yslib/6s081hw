@@ -73,40 +73,15 @@ usertrap(void)
 
     uint64 va = r_stval();
     struct proc * p = myproc();
-
     pte_t * pte = walk(p->pagetable,va,0);
-    if(!(PTE_FLAGS(*pte) & PTE_COW)){
-      panic("not a cow page\n");
+    if(pte == 0){
+      exit(-1);
     }
-
-    const uint64 src_pa = PTE2PA(*pte);
-
-    char * pa = kalloc(); // add a ref count for new
-
-    if(pa == 0){
-      printf("not enough physical memory");
+    if(PTE_FLAGS(*pte) & PTE_COW)
+      uvmcow(pte);
+    else{
       p->killed = 1;
     }
-    memmove(pa,(void*)PGROUNDDOWN(src_pa),PGSIZE);
-
-    if(pte == 0) panic("null pte");
-
-    int flags = (PTE_FLAGS(*pte) | PTE_W) & (~PTE_COW); // TODO:: Remove COW bit?
-    *pte = PA2PTE(pa) | flags; // remapping to new
-
-    // release a ref count for src pa
-    int src_ref;
-
-    src_ref = kgetref((void*)(*pte));
-    printf("before deref src_pa:%p %d\n",src_pa,src_ref);
-
-    kfree((void*)src_pa);
-    src_ref = kgetref((void*)(*pte));
-    if(src_ref < 1) panic("invalid ref");
-    if(src_ref == 1){
-      *pte =(PA2PTE(src_pa) | PTE_FLAGS(*pte) | PTE_W )&(~PTE_COW); // Restore Write Bit
-    }
-    //printf("COW: va: %p, dst pa: %p, src pa: %p\n",va,pa,src_pa);
 
   }else {
     printf("usertrap(): unexpected scause %d pid=%d\n", r_scause(), p->pid);

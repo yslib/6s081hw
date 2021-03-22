@@ -75,15 +75,18 @@ void kfree(void *pa) {
 
   acquire(&kmem.lock);
   uint64 index = PHYIDX(PGROUNDDOWN((uint64)r));
-  if (--pmrefcnt[index] > 0) {
-    release(&kmem.lock);
-    return;
+  if(index >= MINPHYPG && index < MAXPHYPG){
+    // only create ref cnt for allocatable physical memory
+    if (--pmrefcnt[index] > 0) {
+      release(&kmem.lock);
+      return;
+    }
   }
-
   memset(pa, 1, PGSIZE);
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+  //printf("kfree:%p\n",r);
 }
 
 
@@ -99,14 +102,18 @@ void *kalloc(void) {
   if (r)
     kmem.freelist = r->next;
 
-  uint64 index = PHYIDX(PGROUNDDOWN((uint64)r));
-
-  //uint64 index = PHYIDX((uint64)r);
-  if (pmrefcnt[index] != 0) {
-    printf("alloc dirty phm:%p (%p - %p) %d %d\n",r,KERNBASE,PHYSTOP,index,pmrefcnt[index]);
-    exit(-1);
+  if(r){
+    uint64 index = PHYIDX(PGROUNDDOWN((uint64)r));
+    if(index >= MINPHYPG && index < MAXPHYPG){
+      // only create ref cnt for allocatable physical memory
+      if (pmrefcnt[index] != 0) {
+        printf("alloc dirty phm:%p (%p - %p) %d %d\n",r,KERNBASE,PHYSTOP,index,pmrefcnt[index]);
+        exit(-1);
+      }
+      pmrefcnt[index] = 1;
+    }
   }
-  pmrefcnt[index] = 1;
+
   release(&kmem.lock);
   if (r)
     memset((char *)r, 5, PGSIZE); // fill with junk
@@ -114,25 +121,34 @@ void *kalloc(void) {
 }
 
 int kgetref(const void * pa){
+
+  uint64 index = PHYIDX(PGROUNDDOWN(PTE2PA((uint64)pa)));
+  if(index >= MINPHYPG && index < MAXPHYPG){
+    // only create ref cnt for allocatable physical memory
   int ref;
   acquire(&kmem.lock);
   //uint64 index = PHYIDX(PGROUNDDOWN((uint64)pa));
-  uint64 index = PHYIDX(PGROUNDDOWN(PTE2PA((uint64)pa)));
+
   //uint64 index = PHYIDX((uint64)pa);
   ref = pmrefcnt[index];
   release(&kmem.lock);
   return ref;
+  }
+  return -1;
 }
 
 void kaddref(void *pa) {
-  acquire(&kmem.lock);
   uint64 index = PHYIDX(PGROUNDDOWN(PTE2PA((uint64)pa)));
-  //uint64 index = PHYIDX((uint64)pa);
-  //printf("kalloc: add ref for %p (%d) \n",pa, index);
-  if(pmrefcnt[index] <= 0){
-    panic("invalid ref\n");
-  }
-  pmrefcnt[index]++;
-  release(&kmem.lock);
+  if(index >= MINPHYPG && index < MAXPHYPG){
+    // only create ref cnt for allocatable physical memory
+    acquire(&kmem.lock);
+    //uint64 index = PHYIDX((uint64)pa);
+    //printf("kalloc: add ref for %p (%d) \n",pa, index);
+    if(pmrefcnt[index] <= 0){
+      panic("invalid ref\n");
+    }
+    pmrefcnt[index]++;
+    release(&kmem.lock);
+    }
 }
 

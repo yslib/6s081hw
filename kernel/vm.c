@@ -345,7 +345,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree(mem);
       goto err;
     }
-    *pte = *pte | flags;
+    *pte = PA2PTE(PTE2PA(*pte)) | flags;
 #endif
 
   }
@@ -354,6 +354,44 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
+}
+//
+// Handle for pte when the pte is a COW page fault
+void uvmcow(pte_t * pte){
+    if(pte == 0) panic("null pte");
+    int oldflags = PTE_FLAGS(*pte);
+    if(!(oldflags & PTE_COW)){
+      panic("not a cow page\n");
+    }
+
+    int newflags = ((oldflags) | PTE_W ) & (~PTE_COW);
+    //printf("page fault pte flags: %p\n",oldflags);
+
+    const uint64 src_pa = PTE2PA(*pte);
+    int refcnt;
+    refcnt = kgetref((void*)(*pte));
+
+    // printf("before deref pa:%p %d\n",src_pa,refcnt);
+    if(refcnt < 1)panic("invalid cow ref\n");
+
+    if(refcnt == 1){
+      //remove cow bit and restore write access
+      *pte =(PA2PTE(src_pa) | newflags);
+      //printf("COW: va: %p, src pa: %p, new flags: %p\n",va,src_pa,newflags);
+    }else{
+      // allocate a new physical memory
+      char * pa = kalloc(); // add a ref count for new
+      if(pa == 0){
+        //printf("not enough physical memory");
+        exit(-1);
+      }
+      memmove(pa,(void*)PGROUNDDOWN((uint64)src_pa),PGSIZE);
+      refcnt = kgetref((void*)(*pte));
+      *pte = PA2PTE(pa) | newflags; // remapping to new
+      kfree((void*)src_pa);
+      //printf("COW: va: %p, dst pa: %p, src pa: %p\n",va,pa,src_pa);
+    }
+
 }
 
 // mark a PTE invalid for user access.
@@ -376,12 +414,32 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  pte_t * pte;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
+
+
+    // pa0 = walkaddr(pagetable, va0);
+    // if(pa0 == 0)
+      // return -1;
+      //
+    if(va0 >= MAXVA)
       return -1;
+    pte = walk(pagetable,va0,0);
+    if(pte == 0){
+      return -1;
+    }
+    if((*pte & PTE_V) == 0)
+      return -1;
+    if((*pte & PTE_U) == 0)
+      return -1;
+
+    if(PTE_FLAGS(*pte) & PTE_COW){
+      uvmcow(pte);
+    }
+    pa0 = PTE2PA(*pte);
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
