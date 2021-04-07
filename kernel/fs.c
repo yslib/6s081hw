@@ -374,6 +374,8 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
+
+
 static uint
 bmap(struct inode *ip, uint bn)
 {
@@ -400,7 +402,30 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  bn -= NINDIRECT;
+  if(bn < MAXFILE){
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
 
+    struct buf *bp0 = bread(ip->dev, addr);
+    a = (uint*)bp0->data;
+    uint ibn = bn/NINDIRECT;
+    if((addr = a[ibn]) == 0){
+      a[ibn] = addr = balloc(ip->dev);
+      log_write(bp0);
+    }
+
+    struct buf *bp1 = bread(ip->dev, addr);
+    a = (uint*)bp1->data;
+    uint jbn = bn % NINDIRECT;
+    if((addr = a[jbn]) == 0){
+      a[jbn] = addr = balloc(ip->dev);
+      log_write(bp1);
+    }
+    brelse(bp0);
+    brelse(bp1);
+    return addr;
+  }
   panic("bmap: out of range");
 }
 
@@ -430,6 +455,26 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT+1]){
+    struct buf* bp0 = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp0->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j]){
+        struct buf* bp1 = bread(ip->dev,j);
+        uint* a = (uint*)bp1->data;
+        for(int k = 0; k < NINDIRECT; k++){
+          if(a[k])
+            bfree(ip->dev, a[j]);
+        }
+        brelse(bp1);
+        bfree(ip->dev, a[j]);
+      }
+    }
+    brelse(bp0);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
