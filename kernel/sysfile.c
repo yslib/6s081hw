@@ -484,3 +484,16 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_symlink(void){
+  uint64 targetaddr = 0,pathaddr=0;
+  if(argaddr(0,&targetaddr) < 0)
+    return -1;
+
+  if(argaddr(1,&pathaddr) < 0)
+    return -1;
+
+  //printf("target: %s\n path: %s\n",(char*)targetaddr,(char*)pathaddr);
+  return 0;
+}
