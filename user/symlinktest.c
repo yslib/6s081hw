@@ -104,6 +104,7 @@ testsymlink(void)
 
   r = symlink("/testsymlink/2", "/testsymlink/1");
   if(r) fail("Failed to link 1->2");
+  printf("creating 2 ... \n");
   r = symlink("/testsymlink/3", "/testsymlink/2");
   if(r) fail("Failed to link 2->3");
   r = symlink("/testsymlink/4", "/testsymlink/3");
@@ -114,7 +115,7 @@ testsymlink(void)
 
   fd1 = open("/testsymlink/4", O_CREATE | O_RDWR);
   if(fd1<0) fail("Failed to create 4\n");
-  printf("open /testsymlink/1 ... ");
+  printf("open /testsymlink/1 ... \n");
   fd2 = open("/testsymlink/1", O_RDWR);
   if(fd2<0) fail("Failed to open 1\n");
 
@@ -124,7 +125,6 @@ testsymlink(void)
   if(r!=1) fail("Failed to write to 1\n");
   r = read(fd1, &c2, 1);
   if(r!=1){
-    printf("Failed to read from 4 : %d\n",r);
     fail("Failed to read from 4\n");
   }  
   if(c!=c2)

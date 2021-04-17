@@ -317,21 +317,31 @@ sys_open(void)
       // read target path recursively read
       char targetpath[MAXPATH];
       struct inode * prev_ip = ip;
-      struct inode * cur_ip;
+      struct inode * cur_ip = 0;
       int rdc=0;
       int r = 0;
-      while((rdc = readi(prev_ip,0,(uint64)targetpath,0,MAXPATH)) != 0 
+      while((rdc = readi(prev_ip,0,(uint64)targetpath,0,MAXPATH)) >= 0 
           && (cur_ip = namei(targetpath)) != 0 
-          && r <= 15
-          && cur_ip->type == T_SYMLINK){
+          && r <= 15){
         // unlock prev_ip and lock cur ip 
         iunlockput(prev_ip);
         ilock(cur_ip);
+        if(cur_ip->type != T_SYMLINK){
+          ilock(prev_ip);
+          iunlockput(cur_ip);
+          break;
+        }
         printf("recursively read\n");
         prev_ip = cur_ip;
         r++;
       }
-      if(!rdc){
+      printf("rdc : %d, cur_ip:%p, r:%d ",rdc,cur_ip,r);
+      if(cur_ip){
+        printf("cur_ip type:%d \n",cur_ip->type);
+      }else{
+        printf("\n");
+      }
+      if(rdc<=0){
         panic("read symlink target path length");
       }
       iunlockput(prev_ip);
@@ -348,7 +358,7 @@ sys_open(void)
         end_op();
         return -1;
       }
-      printf("fead symlink recursively: %s %d rdc: %d curip: %p \n",targetpath, cur_ip->type,r,cur_ip);
+
       // not a symlink,  success?
       ip = cur_ip;
       if(ip->type == T_DIR && omode != O_RDONLY){
@@ -356,7 +366,7 @@ sys_open(void)
         end_op();
         return -1;
       }
-      printf("open symlink success: %d\n",ip->type);
+      printf("open symlink success: %s %d inode address: %p\n",targetpath, ip->type,ip);
     }
   }
 
@@ -542,10 +552,11 @@ sys_symlink(void){
   begin_op();
   struct inode * ip = create(path, T_SYMLINK, 0, 0);
   if(ip == 0){
-    // printf("sys_symlink create: target and path: %s %s\n",targetpath,path);
+    printf("sys_symlink: create failed\n");
     end_op();
     return -1;
   }
+  printf("sys_symlink: target and path: %s %s type: %d\n",targetpath,path,ip->type);
 
   // store the target path into the created inode's block data
   if(writei(ip, 0,(uint64)targetpath, 0, MAXPATH) == 0){
