@@ -114,14 +114,19 @@ testsymlink(void)
 
   fd1 = open("/testsymlink/4", O_CREATE | O_RDWR);
   if(fd1<0) fail("Failed to create 4\n");
+  printf("open /testsymlink/1 ... ");
   fd2 = open("/testsymlink/1", O_RDWR);
   if(fd2<0) fail("Failed to open 1\n");
 
   c = '#';
   r = write(fd2, &c, 1);
+  printf("....... Written # to 1\n");
   if(r!=1) fail("Failed to write to 1\n");
   r = read(fd1, &c2, 1);
-  if(r!=1) fail("Failed to read from 4\n");
+  if(r!=1){
+    printf("Failed to read from 4 : %d\n",r);
+    fail("Failed to read from 4\n");
+  }  
   if(c!=c2)
     fail("Value read from 4 differed from value written to 1\n");
 

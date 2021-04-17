@@ -313,6 +313,50 @@ sys_open(void)
       iunlockput(ip);
       end_op();
       return -1;
+    }else if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+      // read target path recursively read
+      char targetpath[MAXPATH];
+      struct inode * prev_ip = ip;
+      struct inode * cur_ip;
+      int rdc=0;
+      int r = 0;
+      while((rdc = readi(prev_ip,0,(uint64)targetpath,0,MAXPATH)) != 0 
+          && (cur_ip = namei(targetpath)) != 0 
+          && r <= 15
+          && cur_ip->type == T_SYMLINK){
+        // unlock prev_ip and lock cur ip 
+        iunlockput(prev_ip);
+        ilock(cur_ip);
+        printf("recursively read\n");
+        prev_ip = cur_ip;
+        r++;
+      }
+      if(!rdc){
+        panic("read symlink target path length");
+      }
+      iunlockput(prev_ip);
+
+      if(!cur_ip){
+        end_op();
+        return -1;
+      }
+      ilock(cur_ip);
+      if(r > 15){
+        // max recursive depth
+        printf("max recursively depth!!\n");
+        iunlockput(cur_ip);
+        end_op();
+        return -1;
+      }
+      printf("fead symlink recursively: %s %d rdc: %d curip: %p \n",targetpath, cur_ip->type,r,cur_ip);
+      // not a symlink,  success?
+      ip = cur_ip;
+      if(ip->type == T_DIR && omode != O_RDONLY){
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      printf("open symlink success: %d\n",ip->type);
     }
   }
 
@@ -487,13 +531,27 @@ sys_pipe(void)
 
 uint64
 sys_symlink(void){
-  uint64 targetaddr = 0,pathaddr=0;
-  if(argaddr(0,&targetaddr) < 0)
+  char targetpath[MAXPATH], path[MAXPATH];
+  if(argstr(0,targetpath,MAXPATH) < 0)
     return -1;
 
-  if(argaddr(1,&pathaddr) < 0)
+  if(argstr(1,path,MAXPATH) < 0)
     return -1;
 
-  //printf("target: %s\n path: %s\n",(char*)targetaddr,(char*)pathaddr);
+  // create a new file with T_SYMLINK type
+  begin_op();
+  struct inode * ip = create(path, T_SYMLINK, 0, 0);
+  if(ip == 0){
+    // printf("sys_symlink create: target and path: %s %s\n",targetpath,path);
+    end_op();
+    return -1;
+  }
+
+  // store the target path into the created inode's block data
+  if(writei(ip, 0,(uint64)targetpath, 0, MAXPATH) == 0){
+    panic("sys_symlink writei");
+  }
+  iunlockput(ip);
+  end_op();
   return 0;
 }

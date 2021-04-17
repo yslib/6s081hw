@@ -2,6 +2,6 @@
 #include "user/user.h"
 
 int main(int argc,char ** argv){
-  symlink(0,0);
+  symlink("ls","ls_link");
   return 0;
 }
