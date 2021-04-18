@@ -324,22 +324,16 @@ sys_open(void)
           && (cur_ip = namei(targetpath)) != 0 
           && r <= 15){
         // unlock prev_ip and lock cur ip 
-        iunlockput(prev_ip);
+        iunlock(prev_ip);
         ilock(cur_ip);
         if(cur_ip->type != T_SYMLINK){
           ilock(prev_ip);
           iunlockput(cur_ip);
           break;
         }
-        printf("recursively read\n");
+        //printf("recursively read\n");
         prev_ip = cur_ip;
         r++;
-      }
-      printf("rdc : %d, cur_ip:%p, r:%d ",rdc,cur_ip,r);
-      if(cur_ip){
-        printf("cur_ip type:%d \n",cur_ip->type);
-      }else{
-        printf("\n");
       }
       if(rdc<=0){
         panic("read symlink target path length");
@@ -353,7 +347,7 @@ sys_open(void)
       ilock(cur_ip);
       if(r > 15){
         // max recursive depth
-        printf("max recursively depth!!\n");
+       // printf("max recursively depth!!\n");
         iunlockput(cur_ip);
         end_op();
         return -1;
@@ -366,7 +360,7 @@ sys_open(void)
         end_op();
         return -1;
       }
-      printf("open symlink success: %s %d inode address: %p\n",targetpath, ip->type,ip);
+      //printf("open symlink success: %s %d inode address: %p\n",targetpath, ip->type,ip);
     }
   }
 
@@ -552,11 +546,11 @@ sys_symlink(void){
   begin_op();
   struct inode * ip = create(path, T_SYMLINK, 0, 0);
   if(ip == 0){
-    printf("sys_symlink: create failed\n");
+   // printf("sys_symlink: create failed\n");
     end_op();
     return -1;
   }
-  printf("sys_symlink: target and path: %s %s type: %d\n",targetpath,path,ip->type);
+ // printf("sys_symlink: target and path: %s %s type: %d\n",targetpath,path,ip->type);
 
   // store the target path into the created inode's block data
   if(writei(ip, 0,(uint64)targetpath, 0, MAXPATH) == 0){
