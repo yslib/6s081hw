@@ -6,6 +6,10 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "fcntl.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
 
 uint64
 sys_exit(void)
@@ -116,10 +120,22 @@ sys_mmap(void){
   // find a empty vma
   struct proc * p = myproc();
 
+
   if(fd < 0 || fd >= NOFILE || (f=p->ofile[fd]) == 0){
     printf("invalid fd for this process\n");
     return -1;
   }
+
+  int r = prot & PROT_READ ? 1:0;
+  int w = prot & PROT_WRITE ? 1:0;
+
+  if(r != f->readable || (w != f->writable && flags != MAP_PRIVATE)){
+    printf("%d %d %d %d\n",r,f->readable,w,f->writable);
+    return -1;
+  }
+  
+
+  // check prot according to file access
 
   struct vma * v = 0;
   uint64 next_begin = 0;
@@ -130,7 +146,7 @@ sys_mmap(void){
     return -1;
   }
   if(p->vmacount == 0){
-    next_begin = PGROUNDDOWN(TRAPFRAME - length);
+    next_begin = PGROUNDDOWN(TRAPFRAME - 10000*PGSIZE);
   }else{
     next_begin = PGROUNDDOWN(((uint64)p->vmas[p->vmacount - 1].start - length));
   }
@@ -146,6 +162,8 @@ sys_mmap(void){
     panic("not an empty vma\n");
   }
   printf("sys_mmap: length: %d, prot: %d, flags: %d,fd: %d,offset: %d, map to: %p\n",length,prot,flags,fd,offset,next_begin);
+
+
 
   filedup(f);  // add ref
 
