@@ -128,6 +128,12 @@ found:
     return 0;
   }
 
+  // initialize vma
+  p->vmacount = 0;
+  for(int i = 0 ; i< NVMA;i++){
+    p->vmas[i].file = 0;
+  }
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -148,6 +154,9 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+
+
+
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;

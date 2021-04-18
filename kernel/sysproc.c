@@ -95,3 +95,71 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_mmap(void){
+  uint64 length;
+  int prot;
+  int flags;
+  int fd;
+  uint64 offset;
+
+  struct file * f;
+
+  argaddr(1,&length);
+  argint(2, &prot);
+  argint(3, &flags);
+  argint(4, &fd);
+  argaddr(5,&offset);
+
+
+  // find a empty vma
+  struct proc * p = myproc();
+
+  if(fd < 0 || fd >= NOFILE || (f=p->ofile[fd]) == 0){
+    printf("invalid fd for this process\n");
+    return -1;
+  }
+
+  struct vma * v = 0;
+  uint64 next_begin = 0;
+
+  acquire(&p->lock);
+  if(p->vmacount >= NVMA){
+    release(&p->lock);
+    return -1;
+  }
+  if(p->vmacount == 0){
+    next_begin = PGROUNDDOWN(TRAPFRAME - length);
+  }else{
+    next_begin = PGROUNDDOWN(((uint64)p->vmas[p->vmacount - 1].start - length));
+  }
+  v = &p->vmas[p->vmacount]; // find an empty vma
+  p->vmacount++; 
+  release(&p->lock);
+
+  if(!v){
+    // cannot find va for mapping
+    return -1;
+  }
+  if(v->file){
+    panic("not an empty vma\n");
+  }
+  printf("sys_mmap: length: %d, prot: %d, flags: %d,fd: %d,offset: %d, map to: %p\n",length,prot,flags,fd,offset,next_begin);
+
+  filedup(f);  // add ref
+
+  v->file = f;
+  v->start = (void*)next_begin;
+  v->offset = offset;
+  v->len = length;
+  v->prot = prot;
+  v->flags = flags;
+
+  return (uint64)v->start;
+}
+
+uint64
+sys_munmap(void){
+  return 0;
+}
