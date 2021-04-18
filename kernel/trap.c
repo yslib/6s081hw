@@ -1,10 +1,14 @@
 #include "types.h"
+#include "spinlock.h"
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
-#include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -67,9 +71,55 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if(r_scause() == 13){
-    // Page Fault
-    uint64 va = PGROUNDUP(r_stval());
+  } else if (r_scause() == 15 || r_scause() == 13){
+    // page fault
+    uint64 va = (r_stval());
+    printf("page fault: %d\n",va);
+    struct proc * p = myproc();
+    // if(p->sz < va || p->trapframe->sp > va){
+    // }
+    {
+      uint64 pa = (uint64)kalloc();
+      if(pa == 0){
+        p->killed = 1;
+      }else{
+        // find in which file the va lies
+        struct file * f = 0;
+        struct vma * v = 0;
+        int prot = 0;
+        uint64 start = 0;
+        for(int i = 0;i<p->vmacount;i++){
+          v = &p->vmas[i];
+          start = (uint64)v->start;
+          if(v->file && va >= start && va < start + v->len){
+            f = v->file;
+            prot = v->prot;
+            break;
+          }
+        }
+
+        if(!f){
+          printf("no corresponding mapped file\n");
+          p->killed = 1;
+        }
+        uint64 read_offset = va - start;
+        int perms =0;
+        perms |=PTE_V;
+        if(prot & PROT_READ) perms |= PTE_R;
+        if(prot & PROT_WRITE) perms |= PTE_W;
+        if(prot & PROT_EXEC) perms |= PTE_X;
+
+        va = PGROUNDDOWN(va);
+        if(mappages(p->pagetable,va,PGSIZE,pa,perms) != 0){
+          panic("page fault panic\n");
+        }
+
+        ilock(f->ip);
+        readi(f->ip,1,va,read_offset,PGSIZE);
+        iunlock(f->ip);
+        // reading data from file
+      }
+    }
   }
   else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

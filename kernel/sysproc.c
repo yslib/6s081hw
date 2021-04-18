@@ -156,6 +156,8 @@ sys_mmap(void){
   v->prot = prot;
   v->flags = flags;
 
+ // growproc((uint64)v->start + length);
+
   return (uint64)v->start;
 }
 
