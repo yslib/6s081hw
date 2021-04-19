@@ -300,10 +300,26 @@ fork(void)
   np->trapframe->a0 = 0;
 
   // increment reference counts on open file descriptors.
+  //
   for(i = 0; i < NOFILE; i++)
-    if(p->ofile[i])
+    if(p->ofile[i]){
       np->ofile[i] = filedup(p->ofile[i]);
+    }
   np->cwd = idup(p->cwd);
+
+  np->vmacount = p->vmacount;
+  for(int i = 0;i<p->vmacount;i++){
+    struct vma * nv = &np->vmas[i];
+    struct vma * v = &p->vmas[i];
+    int nfd = v->fd;
+    nv->file = filedup(np->ofile[nfd]);
+    nv->prot = v->prot;
+    nv->flags = v->flags;
+    nv->start = v->start;
+    nv->fd = v->fd;
+    nv->offset = v->offset;
+    printf("copy mapped file: %d <- %p\n",nv->fd,v->start);
+  }
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 

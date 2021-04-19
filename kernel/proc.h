@@ -90,6 +90,7 @@ struct vma{
   int prot;
   int flags;
   uint64 offset;
+  int fd;
 };
 
 #define NVMA 16

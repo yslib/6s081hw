@@ -5,6 +5,11 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "file.h"
+#include "proc.h"
+#include "fcntl.h"
 
 /*
  * the kernel's page table.
@@ -173,6 +178,30 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
+    if(PTE_FLAGS(*pte) == PTE_V)
+      panic("uvmunmap: not a leaf");
+    if(do_free){
+      uint64 pa = PTE2PA(*pte);
+      kfree((void*)pa);
+    }
+    *pte = 0;
+  }
+}
+
+void
+uvmunmap2(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
+{
+  uint64 a;
+  pte_t *pte;
+
+  if((va % PGSIZE) != 0)
+    panic("uvmunmap: not aligned");
+
+  for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
+    if((pte = walk(pagetable, a, 0)) == 0)
+      panic("uvmunmap: walk");
+    if((*pte & PTE_V) == 0)
+      continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -428,4 +457,138 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+
+uint64 
+map(struct proc * p, void * addr,uint64 length,int prot,int flags,int fd,uint64 offset){
+
+  struct file * f;
+
+  // find a empty vma
+
+  if(fd < 0 || fd >= NOFILE || (f=p->ofile[fd]) == 0){
+    printf("invalid fd for this process\n");
+    return -1;
+  }
+
+  int r = prot & PROT_READ ? 1:0;
+  int w = prot & PROT_WRITE ? 1:0;
+
+  if(r != f->readable || (w != f->writable && flags != MAP_PRIVATE)){
+   // printf("%d %d %d %d\n",r,f->readable,w,f->writable);
+    return -1;
+  }
+  // check prot according to file access
+
+  struct vma * v = 0;
+  uint64 next_begin = 0;
+
+  acquire(&p->lock);
+  if(p->vmacount >= NVMA){
+    release(&p->lock);
+    return -1;
+  }
+
+  // In this lab, we do not need an allocator for a general vma allocation.
+  // Just allocate anywhere you like
+  if(p->vmacount == 0){
+    next_begin = PGROUNDDOWN(TRAPFRAME - 10000*PGSIZE);
+  }else{
+    //next_begin = PGROUNDDOWN(((uint64)p->vmas[p->vmacount - 1].start - length));
+    next_begin = PGROUNDDOWN(TRAPFRAME - 10000*PGSHIFT * p->vmacount);
+    //printf("last start: %p, length: %d, next_begin:%p\n",p->vmas[p->vmacount-1].start,next_begin);
+  }
+  v = &p->vmas[p->vmacount]; // find an empty vma
+  p->vmacount++; 
+  release(&p->lock);
+
+  if(!v){
+    // cannot find va for mapping
+    return -1;
+  }
+  if(v->file){
+    panic("not an empty vma\n");
+  }
+  // printf("sys_mmap: length: %d, prot: %d, flags: %d,fd: %d,offset: %d, map to: %p\n",
+      // length,prot,flags,fd,offset,next_begin);
+
+
+  filedup(f);  // add ref
+
+  v->file = f;
+  v->start = (void*)next_begin;
+  v->offset = offset;
+  v->len = length;
+  v->prot = prot;
+  v->flags = flags;
+  v->fd = fd;
+
+ // growproc((uint64)v->start + length);
+
+  return (uint64)v->start;
+}
+
+uint64
+unmap(uint64 addr,uint64 len){
+  struct vma * v = 0;
+  struct proc * p = myproc();
+  for(int i = 0;i<p->vmacount;i++){
+    struct vma * pv = &p->vmas[i];
+    if(addr >= (uint64)pv->start && addr<(uint64)pv->start + pv->len){
+      v = pv;
+      break;
+    }
+  }
+  if(!v){
+    //printf("cannot find corresponding vma\n");
+    return -1;
+  }
+
+  if(v->flags == MAP_SHARED){
+    // write back to the file
+    for(int i = 0;i < len/PGSIZE;i++){
+      char * pa = (char*)walkaddr(p->pagetable,PGROUNDDOWN(addr + i * PGSIZE));
+      if(pa){
+        filewrite(v->file, addr, len);
+      }else{
+        printf("pgtbl: %p, this page %p is not mapped\n",p->pagetable,PGROUNDDOWN(addr + i*PGSIZE));
+      }
+    }
+  }
+
+  //
+  // Assuming that the addr to be unmapped will either at the start,
+  // or at the end, or the whole region, but not punch a hole in the
+  // middle of a region (it will generate a new vma)
+  //
+  
+  uint64 newstart = 0;
+  uint64 newlen = 0;
+  if(addr == (uint64)v->start && len == v->len){ // whole
+    // unmmap the whole region
+    newstart = 0;
+    newlen = 0;
+    uvmunmap2(p->pagetable,PGROUNDDOWN((uint64)v->start),len/PGSIZE,1);
+  }else if(addr == (uint64)v->start && len <= v->len){ // start
+    newstart = (uint64)v->start + len;
+    newlen = v->len -len;
+    uvmunmap2(p->pagetable,PGROUNDDOWN((uint64)v->start),len/PGSIZE,1);
+  }else if(addr +len == (uint64)v->start + v->len){    // end
+    newstart = (uint64)v->start;
+    newlen = v->len - len;
+    uvmunmap2(p->pagetable,PGROUNDDOWN((uint64)v->start + len),len/PGSIZE,2);
+  }else{
+    // printf("invalid unmap region: %p, %d in %p, %d\n",addr,len,v->start,v->len);
+    return -1;
+  }
+  printf("unmap region: %p, %d in %p, %d\n",addr,len,v->start,v->len);
+
+  if(newlen == 0){
+    fileclose(v->file);
+    v->file = 0;
+  }
+  v->start = (void*)newstart;
+  v->len = newlen;
+  return 0;
 }

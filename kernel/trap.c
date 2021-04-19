@@ -74,7 +74,7 @@ usertrap(void)
   } else if (r_scause() == 15 || r_scause() == 13){
     // page fault
     uint64 va = (r_stval());
-    printf("page fault at: %p cause: %d \n",va, r_scause());
+    //printf("page fault at: %p cause: %d \n",va, r_scause());
     struct proc * p = myproc();
     // if(p->sz < va || p->trapframe->sp > va){
     // }
@@ -101,7 +101,7 @@ usertrap(void)
         }
 
         if(!f){
-          printf("no corresponding mapped file\n");
+          //printf("no corresponding mapped file\n");
           p->killed = 1;
         }
         uint64 read_offset = PGROUNDDOWN(va - start);
@@ -111,7 +111,6 @@ usertrap(void)
         if(prot & PROT_EXEC) perms |= PTE_X;
 
         va = PGROUNDDOWN(va);
-        printf("map page:%p %p\n",va,r_stval());
 
         if(mappages(p->pagetable,va,PGSIZE,pa,perms) != 0){
           panic("page fault panic\n");
@@ -121,7 +120,7 @@ usertrap(void)
         uint64 r;
         r = readi(f->ip,1,va,read_offset,PGSIZE);
         iunlock(f->ip);
-        printf("read %d, va: %p, readi offset :%p\n",r,va,read_offset);
+        printf("pgtbl: %p, read %d, va: %p, readi offset :%p\n",p->pagetable,r,va,read_offset);
       }
     }
   }
