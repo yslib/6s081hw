@@ -129,7 +129,6 @@ found:
   }
 
   // initialize vma
-  p->vmacount = 0;
   for(int i = 0 ; i< NVMA;i++){
     p->vmas[i].file = 0;
   }
@@ -307,18 +306,22 @@ fork(void)
     }
   np->cwd = idup(p->cwd);
 
-  np->vmacount = p->vmacount;
-  for(int i = 0;i<p->vmacount;i++){
-    struct vma * nv = &np->vmas[i];
+
+  // copy mapped file
+  for(int i = 0;i<NVMA;i++){
     struct vma * v = &p->vmas[i];
-    int nfd = v->fd;
-    nv->file = filedup(np->ofile[nfd]);
-    nv->prot = v->prot;
-    nv->flags = v->flags;
-    nv->start = v->start;
-    nv->fd = v->fd;
-    nv->offset = v->offset;
-    printf("copy mapped file: %d <- %p\n",nv->fd,v->start);
+    if(v->file){
+      struct vma * nv = &np->vmas[i];
+      int fd = v->fd;
+      nv->file = filedup(np->ofile[fd]);
+      nv->prot = v->prot;
+      nv->len = v->len;
+      nv->flags = v->flags;
+      nv->start = v->start;
+      nv->fd = fd;
+      nv->offset = v->offset;
+      printf("copy mapped file:%p (%p, %p) %d\n",np->vmas, nv->start,(uint64)(nv->start)+nv->len,fd);
+    }
   }
 
   safestrcpy(np->name, p->name, sizeof(p->name));
@@ -370,6 +373,14 @@ exit(int status)
     panic("init exiting");
 
   // write back for the modified mapped file
+
+  for(int i = 0;i<NVMA;i++){
+    struct vma * v = &p->vmas[i];
+    if(v->file){
+      unmap((uint64)v->start,v->len);
+      v->file = 0; 
+    }
+  }
 
 
   // Close all open files.

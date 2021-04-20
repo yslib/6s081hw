@@ -461,7 +461,13 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 
 uint64 
-map(struct proc * p, void * addr,uint64 length,int prot,int flags,int fd,uint64 offset){
+map(struct proc * p,
+    void * addr,
+    uint64 length, 
+    int prot,
+    int flags,
+    int fd,
+    uint64 offset){
 
   struct file * f;
 
@@ -483,37 +489,23 @@ map(struct proc * p, void * addr,uint64 length,int prot,int flags,int fd,uint64 
 
   struct vma * v = 0;
   uint64 next_begin = 0;
+  int i;
 
   acquire(&p->lock);
-  if(p->vmacount >= NVMA){
+  for(i = 0 ; i< NVMA;i++){
+    if(p->vmas[i].file == 0){
+      v = &p->vmas[i];
+      break;
+    }
+  }
+  if(!v){
     release(&p->lock);
     return -1;
   }
-
-  // In this lab, we do not need an allocator for a general vma allocation.
-  // Just allocate anywhere you like
-  if(p->vmacount == 0){
-    next_begin = PGROUNDDOWN(TRAPFRAME - 10000*PGSIZE);
-  }else{
-    //next_begin = PGROUNDDOWN(((uint64)p->vmas[p->vmacount - 1].start - length));
-    next_begin = PGROUNDDOWN(TRAPFRAME - 10000*PGSHIFT * p->vmacount);
-    //printf("last start: %p, length: %d, next_begin:%p\n",p->vmas[p->vmacount-1].start,next_begin);
-  }
-  v = &p->vmas[p->vmacount]; // find an empty vma
-  p->vmacount++; 
+  next_begin = PGROUNDDOWN(TRAPFRAME - 10000*PGSHIFT * (i+1));
   release(&p->lock);
-
-  if(!v){
-    // cannot find va for mapping
-    return -1;
-  }
-  if(v->file){
-    panic("not an empty vma\n");
-  }
-  // printf("sys_mmap: length: %d, prot: %d, flags: %d,fd: %d,offset: %d, map to: %p\n",
-      // length,prot,flags,fd,offset,next_begin);
-
-
+  //printf("sys_mmap: length: %d, prot: %d, flags: %d,fd: %d,offset: %d, map to: %p\n",
+   //   length,prot,flags,fd,offset,next_begin);
   filedup(f);  // add ref
 
   v->file = f;
@@ -524,8 +516,6 @@ map(struct proc * p, void * addr,uint64 length,int prot,int flags,int fd,uint64 
   v->flags = flags;
   v->fd = fd;
 
- // growproc((uint64)v->start + length);
-
   return (uint64)v->start;
 }
 
@@ -533,9 +523,9 @@ uint64
 unmap(uint64 addr,uint64 len){
   struct vma * v = 0;
   struct proc * p = myproc();
-  for(int i = 0;i<p->vmacount;i++){
+  for(int i = 0;i<NVMA;i++){
     struct vma * pv = &p->vmas[i];
-    if(addr >= (uint64)pv->start && addr<(uint64)pv->start + pv->len){
+    if(pv->file && addr >= (uint64)pv->start && addr<(uint64)pv->start + pv->len){
       v = pv;
       break;
     }
@@ -579,11 +569,10 @@ unmap(uint64 addr,uint64 len){
     newlen = v->len - len;
     uvmunmap2(p->pagetable,PGROUNDDOWN((uint64)v->start + len),len/PGSIZE,2);
   }else{
-    // printf("invalid unmap region: %p, %d in %p, %d\n",addr,len,v->start,v->len);
     return -1;
   }
-  printf("unmap region: %p, %d in %p, %d\n",addr,len,v->start,v->len);
 
+  printf("unmap region: %p, %d in %p, %d\n",addr,len,v->start,v->len);
   if(newlen == 0){
     fileclose(v->file);
     v->file = 0;

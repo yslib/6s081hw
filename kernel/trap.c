@@ -76,34 +76,32 @@ usertrap(void)
     uint64 va = (r_stval());
     //printf("page fault at: %p cause: %d \n",va, r_scause());
     struct proc * p = myproc();
-    // if(p->sz < va || p->trapframe->sp > va){
-    // }
     {
-      uint64 pa = (uint64)kalloc();
-      if(pa == 0){
-        p->killed = 1;
-      }else{
-
-        memset((char*)pa, 0, PGSIZE);
         // find in which file the va lies
         struct file * f = 0;
         struct vma * v = 0;
         int prot = 0;
         uint64 start = 0;
-        for(int i = 0;i<p->vmacount;i++){
+        for(int i = 0;i<NVMA;i++){
           v = &p->vmas[i];
           start = (uint64)v->start;
+          //printf("finding vma: %p - %p\n",start,start + v->len);
           if(v->file && va >= start && va < start + v->len){
             f = v->file;
             prot = v->prot;
             break;
           }
         }
-
         if(!f){
-          //printf("no corresponding mapped file\n");
-          p->killed = 1;
+          //printf("no corresponding mapped file: %p\n", p->vmas);
+          exit(-1);
         }
+        uint64 pa = (uint64)kalloc();
+        if(pa == 0){
+          exit(-1);
+        }
+        memset((char*)pa, 0, PGSIZE);
+
         uint64 read_offset = PGROUNDDOWN(va - start);
         int perms = PTE_U;
         if(prot & PROT_READ) perms |= PTE_R;
@@ -117,11 +115,10 @@ usertrap(void)
         }
         // reading data from file
         ilock(f->ip);
-        uint64 r;
-        r = readi(f->ip,1,va,read_offset,PGSIZE);
+        //uint64 r;
+        readi(f->ip,1,va,read_offset,PGSIZE);
         iunlock(f->ip);
-        printf("pgtbl: %p, read %d, va: %p, readi offset :%p\n",p->pagetable,r,va,read_offset);
-      }
+        //printf("pgtbl: %p, read %d, va: %p, readi offset :%p\n",p->pagetable,r,va,read_offset);
     }
   }
   else {
